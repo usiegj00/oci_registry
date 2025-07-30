@@ -29,7 +29,15 @@ module OCIRegistry
         # warn "Redirected to #{location}"
         # Handle the case where location is a relative URL by reconstructing the full URL
         new_uri = ::URI.join(uri, location)
-        http_get(new_uri, headers, limit - 1)
+        
+        # Don't forward Authorization header across domain boundaries
+        # This was discovered through pain and suffering when Docker redirects to S3.
+        new_headers = headers.dup
+        if uri.host != new_uri.host
+          new_headers.delete('Authorization')
+        end
+        
+        http_get(new_uri, new_headers, limit - 1)
       # 429
       when Net::HTTPTooManyRequests
         puts "Rate limited: #{response.code} #{response.message}"
@@ -58,7 +66,9 @@ module OCIRegistry
         json = JSON.parse(response.body)
         json['token']
       else
-        raise "Failed to obtain token: #{response.code} #{response.message}"
+        error_detail = response.body.to_s.strip
+        error_detail = ": #{error_detail}" unless error_detail.empty?
+        raise "Failed to obtain token: #{response.code} #{response.message}#{error_detail}"
       end
     end
 
@@ -80,7 +90,9 @@ module OCIRegistry
       if response.is_a?(Net::HTTPSuccess)
         JSON.parse(response.body)
       else
-        raise "Failed to fetch manifest: #{response.code} #{response.message}"
+        error_detail = response.body.to_s.strip
+        error_detail = ": #{error_detail}" unless error_detail.empty?
+        raise "Failed to fetch manifest: #{response.code} #{response.message}#{error_detail}"
       end
     end
 
@@ -94,7 +106,9 @@ module OCIRegistry
       if response.is_a?(Net::HTTPSuccess)
         JSON.parse(response.body)
       else
-        raise "Failed to retrieve image configuration for #{uri.inspect}: #{response.code} #{response.message}"
+        error_detail = response.body.to_s.strip
+        error_detail = ": #{error_detail}" unless error_detail.empty?
+        raise "Failed to retrieve image configuration for #{uri.inspect}: #{response.code} #{response.message}#{error_detail}"
       end
     end
 

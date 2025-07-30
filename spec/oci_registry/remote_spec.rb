@@ -33,6 +33,38 @@ RSpec.describe OCIRegistry::Remote do
           described_class.http_get(URI("https://example.com/test"), {}, 0)
         }.to raise_error("Too many HTTP redirects")
       end
+
+      it "strips Authorization header when redirecting to different host" do
+        headers = { 'Authorization' => 'Bearer token123' }
+        
+        stub_request(:get, "https://registry.docker.io/test")
+          .with(headers: headers)
+          .to_return(status: 302, headers: { 'Location' => 'https://s3.amazonaws.com/bucket/file' })
+        
+        # Should NOT have Authorization header
+        stub_request(:get, "https://s3.amazonaws.com/bucket/file")
+          .with { |request| request.headers['Authorization'].nil? }
+          .to_return(status: 200, body: "S3 content")
+
+        response = described_class.http_get(URI("https://registry.docker.io/test"), headers)
+        expect(response.body).to eq("S3 content")
+      end
+
+      it "preserves Authorization header when redirecting to same host" do
+        headers = { 'Authorization' => 'Bearer token123' }
+        
+        stub_request(:get, "https://registry.docker.io/v2/test")
+          .with(headers: headers)
+          .to_return(status: 302, headers: { 'Location' => 'https://registry.docker.io/v2/test-redirect' })
+        
+        # Should still have Authorization header
+        stub_request(:get, "https://registry.docker.io/v2/test-redirect")
+          .with(headers: headers)
+          .to_return(status: 200, body: "Registry content")
+
+        response = described_class.http_get(URI("https://registry.docker.io/v2/test"), headers)
+        expect(response.body).to eq("Registry content")
+      end
     end
 
     context "with rate limiting" do
