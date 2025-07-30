@@ -138,7 +138,9 @@ module OCIRegistry
             break
           end
         else
-          puts "Failed to fetch tags for #{repository}: https://#{host}#{next_url} #{response.code} #{response.message}"
+          error_detail = response.body.to_s.strip
+          error_detail = ": #{error_detail}" unless error_detail.empty?
+          puts "Failed to fetch tags for #{repository}: https://#{host}#{next_url} #{response.code} #{response.message}#{error_detail}"
           break
         end
       end
@@ -174,7 +176,9 @@ module OCIRegistry
           found = extract_layer(response.body, file_name)
           return true if found
         else
-          puts "Failed to download layer #{digest}: #{response.code} #{response.message}"
+          error_detail = response.body.to_s.strip
+          error_detail = ": #{error_detail}" unless error_detail.empty?
+          puts "Failed to download layer #{digest}: #{response.code} #{response.message}#{error_detail}"
         end
       end
       false

@@ -104,6 +104,16 @@ RSpec.describe OCIRegistry::Remote do
       token = described_class.get_docker_token("library/nginx", "user", "pass")
       expect(token).to eq("auth-token")
     end
+
+    it "includes response body in error message on failure" do
+      error_body = '{"errors":[{"code":"UNAUTHORIZED","message":"authentication required"}]}'
+      stub_request(:get, "https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/nginx:pull")
+        .to_return(status: 401, body: error_body)
+
+      expect {
+        described_class.get_docker_token("library/nginx")
+      }.to raise_error(/Failed to obtain token: 401.*#{Regexp.escape(error_body)}/)
+    end
   end
 
   describe ".get_manifest" do
@@ -117,6 +127,21 @@ RSpec.describe OCIRegistry::Remote do
 
       manifest = described_class.get_manifest("registry-1.docker.io", "test-token", "library/nginx", "latest")
       expect(manifest["schemaVersion"]).to eq(2)
+    end
+  end
+
+  describe ".get_blob" do
+    it "includes detailed error message on failure" do
+      # This simulates the S3 error you encountered
+      s3_error = '<?xml version="1.0" encoding="UTF-8"?><Error><Code>InvalidArgument</Code><Message>Only one auth mechanism allowed</Message></Error>'
+      
+      stub_request(:get, "https://registry-1.docker.io/v2/library/nginx/blobs/sha256:abc123")
+        .with(headers: { "Authorization" => "Bearer test-token" })
+        .to_return(status: 400, body: s3_error)
+
+      expect {
+        described_class.get_blob("registry-1.docker.io", "test-token", "library/nginx", "sha256:abc123")
+      }.to raise_error(/Failed to retrieve image configuration.*400.*#{Regexp.escape(s3_error)}/)
     end
   end
 

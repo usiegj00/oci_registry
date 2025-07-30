@@ -41,3 +41,4 @@ Gemfile.lock
 
 # Ignore backup files
 *.bak
+tags
